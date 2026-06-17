@@ -1,0 +1,81 @@
+name: Build & Package
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:    # 手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install flask
+          echo "依赖安装完成"
+
+      - name: 构建分发包
+        run: |
+          python dist/build_all.py
+          echo "构建完成"
+
+      - name: 上传 Windows 包
+        uses: actions/upload-artifact@v4
+        with:
+          name: VM-Panel-Windows
+          path: dist/VM-Panel-Windows.zip
+
+      - name: 上传 Linux 包
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-panel-linux
+          path: dist/vm-panel-linux.tar.gz
+
+      - name: 上传版本信息
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-info
+          path: dist/version.json
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+
+      - name: 创建 Release 并上传
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            VM-Panel-Windows/VM-Panel-Windows.zip
+            vm-panel-linux/vm-panel-linux.tar.gz
+          body: |
+            ## VM Panel ${{ github.ref_name }}
+
+            自动构建的发行包：
+
+            - 🪟 `VM-Panel-Windows.zip` — Windows 便携版（解压即用）
+            - 🐧 `vm-panel-linux.tar.gz` — Linux 部署版（含 install.sh）
+
+            ### 使用说明
+
+            **Windows**: 解压 → 双击 `start.bat` → 访问 http://localhost:5000
+
+            **Linux**: `tar xzf vm-panel-linux.tar.gz && cd vm-panel-linux && sudo bash deploy/linux/install.sh`
