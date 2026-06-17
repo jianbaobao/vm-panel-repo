@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.settings') }}{% endblock %}
+
+{% block content %}
+<h4 class="mb-3"><i class="bi bi-gear me-2"></i>{{ _('page.settings') }}</h4>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-hdd-network me-2"></i>{{ _('settings.info') }}</div>
+            <div class="card-body" id="settings-host-info">
+                <div class="spinner-border text-primary"></div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header"><i class="bi bi-activity me-2"></i>{{ _('settings.performance') }}</div>
+            <div class="card-body" id="settings-stats">
+                <div class="spinner-border text-primary"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-sliders me-2"></i>{{ _('settings.templates') }}</div>
+            <div class="card-body">
+                <table class="table mb-0">
+                    <thead><tr><th>{{ _('config.template') }}</th><th>{{ _('vm.vcpu') }}</th><th>{{ _('vm.memory') }}</th><th>{{ _('vm.disk') }}</th></tr></thead>
+                    <tbody id="template-list-body">
+                        <tr><td colspan="4" class="text-center text-muted">{{ _('common.loading') }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>{{ _('settings.panel_info') }}</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">{{ _('settings.version') }}</span>
+                    <span><strong>1.0.0</strong></span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">{{ _('settings.sim_mode') }}</span>
+                    <span>
+                        {% if simulate_mode %}
+                        <span class="badge bg-warning text-dark">{{ _('settings.on') }}</span>
+                        {% else %}
+                        <span class="badge bg-success">{{ _('settings.off') }}</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">{{ _('settings.backend') }}</span>
+                    <span>Flask + Python 3</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">{{ _('settings.hypervisor') }}</span>
+                    <span>KVM/QEMU + libvirt</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/host/info')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const h = res.data;
+            document.getElementById('settings-host-info').innerHTML = `
+                <table class="table mb-0">
+                    <tr><td class="text-muted" style="width:120px">{{ _('host.hostname') }}</td><td>${h.hostname}</td></tr>
+                    <tr><td class="text-muted">{{ _('host.arch') }}</td><td>${h.arch}</td></tr>
+                    <tr><td class="text-muted">{{ _('host.cpu') }}</td><td>${h.cpus} {{ _('host.cores') }} — ${h.cpu_model}</td></tr>
+                    <tr><td class="text-muted">{{ _('host.total_mem') }}</td><td>${(h.memory_total_mb / 1024).toFixed(1)} GB</td></tr>
+                    <tr><td class="text-muted">{{ _('host.free_mem') }}</td><td>${(h.memory_free_mb / 1024).toFixed(1)} GB</td></tr>
+                </table>
+            `;
+        });
+
+    fetch('/api/host/stats')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const s = res.data;
+            document.getElementById('settings-stats').innerHTML = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>{{ _('stat.cpu') }}</span><span>${s.cpu_percent}%</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar ${s.cpu_percent > 80 ? 'bg-danger' : s.cpu_percent > 60 ? 'bg-warning' : 'bg-info'}"
+                             style="width:${s.cpu_percent}%"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>{{ _('stat.memory') }}</span><span>${s.memory_percent}%</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar ${s.memory_percent > 80 ? 'bg-danger' : s.memory_percent > 60 ? 'bg-warning' : 'bg-info'}"
+                             style="width:${s.memory_percent}%"></div>
+                    </div>
+                </div>
+                ${s.disk_usage && s.disk_usage.total_gb ? `
+                <div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>{{ _('storage.disk_usage') }}</span><span>${s.disk_usage.used_gb} GB / ${s.disk_usage.total_gb} GB (${s.disk_usage.percent}%)</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar ${s.disk_usage.percent > 80 ? 'bg-danger' : s.disk_usage.percent > 60 ? 'bg-warning' : 'bg-success'}"
+                             style="width:${s.disk_usage.percent}%"></div>
+                    </div>
+                </div>` : ''}
+            `;
+        });
+
+    fetch('/api/templates')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const tbody = document.getElementById('template-list-body');
+            const TEMPLATE_NAMES = {
+                tiny: '{{ _("template.tiny") }}',
+                small: '{{ _("template.small") }}',
+                medium: '{{ _("template.medium") }}',
+                large: '{{ _("template.large") }}',
+            };
+            tbody.innerHTML = Object.entries(res.data).map(([k, v]) => `
+                <tr>
+                    <td>${TEMPLATE_NAMES[k] || k}</td>
+                    <td>${v.vcpu}</td>
+                    <td>${(v.memory_mb / 1024).toFixed(1)} GB</td>
+                    <td>${v.disk_gb} GB</td>
+                </tr>`).join('');
+        });
+});
+</script>
+{% endblock %}

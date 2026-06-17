@@ -1,0 +1,41 @@
+[
+  {
+    "name": "proxmox-demo",
+    "type": "proxmox",
+    "host": "192.168.1.100",
+    "port": 8006,
+    "user": "root@pam",
+    "password": "********",
+    "verify_ssl": false,
+    "enabled": false
+  },
+  {
+    "name": "ovirt-demo",
+    "type": "ovirt",
+    "host": "ovirt-engine.example.com",
+    "port": 443,
+    "user": "admin@internal",
+    "password": "********",
+    "insecure": true,
+    "enabled": false
+  },
+  {
+    "name": "vsphere-demo",
+    "type": "vsphere",
+    "host": "vcenter.example.com",
+    "port": 443,
+    "user": "administrator@vsphere.local",
+    "password": "********",
+    "insecure": true,
+    "enabled": false
+  },
+  {
+    "name": "test-pve",
+    "type": "proxmox",
+    "host": "10.0.0.1",
+    "port": 8006,
+    "user": "root@pam",
+    "password": "test123",
+    "enabled": false
+  }
+]

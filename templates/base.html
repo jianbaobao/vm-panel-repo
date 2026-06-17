@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ _('app.name') }}{% endblock %} — {{ _('app.name') }}</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <i class="bi bi-cpu me-2 fs-4"></i>
+                <span class="fw-bold">{{ _('app.name') }}</span>
+                <span class="badge bg-info ms-2 fs-7">{{ _('app.version') }}</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-light small" id="host-info">
+                    <i class="bi bi-hdd-network"></i> {{ _('host.connecting') }}
+                </span>
+                {% if simulate_mode %}
+                <span class="badge bg-secondary" id="sim-mode-badge">
+                    <i class="bi bi-gear-wide-connected"></i> {{ _('app.sim_mode') }}
+                </span>
+                {% endif %}
+            </div>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navMenu">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">
+                            <i class="bi bi-speedometer2"></i> {{ _('nav.dashboard') }}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path.startswith('/vms') %}active{% endif %}" href="/vms">
+                            <i class="bi bi-display"></i> {{ _('nav.vms') }}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path.startswith('/networks') %}active{% endif %}" href="/networks">
+                            <i class="bi bi-diagram-3"></i> {{ _('nav.networks') }}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path.startswith('/storage') or request.path.startswith('/isos') %}active{% endif %}" href="/storage">
+                            <i class="bi bi-database"></i> {{ _('nav.storage') }}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/events' %}active{% endif %}" href="/events">
+                            <i class="bi bi-clock-history"></i> {{ _('page.events') }}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/tasks' %}active{% endif %}" href="/tasks">
+                            <i class="bi bi-list-check"></i> {{ _('page.tasks') }}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path.startswith('/plugins') %}active{% endif %}" href="/plugins">
+                            <i class="bi bi-puzzle"></i> {{ _('page.plugins') }}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/settings' %}active{% endif %}" href="/settings">
+                            <i class="bi bi-gear"></i> {{ _('nav.settings') }}
+                        </a>
+                    </li>
+                    <!-- 语言切换 -->
+                    <li class="nav-item dropdown ms-2">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-globe2"></i>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item {% if current_lang == 'zh' %}active{% endif %}" href="#" onclick="switchLang('zh')">
+                                <i class="bi bi-check-lg {% if current_lang != 'zh' %}invisible{% endif %}"></i>
+                                {{ _('lang.zh') }}
+                            </a></li>
+                            <li><a class="dropdown-item {% if current_lang == 'en' %}active{% endif %}" href="#" onclick="switchLang('en')">
+                                <i class="bi bi-check-lg {% if current_lang != 'en' %}invisible{% endif %}"></i>
+                                {{ _('lang.en') }}
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Toast 通知容器 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+    <!-- 主内容 -->
+    <div class="container-fluid py-3">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- 脚本 -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/main.js"></script>
+    <script>
+    // 语言切换函数
+    function switchLang(lang) {
+        fetch('/api/lang', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lang: lang }),
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) {
+                location.reload();
+            }
+        });
+    }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

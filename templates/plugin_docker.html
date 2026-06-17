@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ _('plugin.docker') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-box me-2"></i>{{ _('plugin.docker') }}</h4>
+    <button class="btn btn-outline-secondary" onclick="loadContainers()">
+        <i class="bi bi-arrow-clockwise"></i> {{ _('common.refresh') }}
+    </button>
+</div>
+
+<div class="row g-3 mb-3" id="docker-stats-row">
+    <div class="col-md-4">
+        <div class="card stat-card border-info">
+            <div class="card-body">
+                <i class="bi bi-box stat-icon"></i>
+                <div class="stat-value text-info" id="docker-total">-</div>
+                <div class="stat-label">{{ _('plugin.docker_total') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card border-success">
+            <div class="card-body">
+                <i class="bi bi-play-fill stat-icon"></i>
+                <div class="stat-value text-success" id="docker-running">-</div>
+                <div class="stat-label">{{ _('stat.running') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card border-secondary">
+            <div class="card-body">
+                <i class="bi bi-server stat-icon"></i>
+                <div class="stat-value" id="docker-version">-</div>
+                <div class="stat-label">{{ _('plugin.docker_version') }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-list-ul me-2"></i>{{ _('plugin.docker_containers') }}</div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>{{ _('plugin.container_id') }}</th>
+                    <th>{{ _('vm.name') }}</th>
+                    <th>{{ _('plugin.image') }}</th>
+                    <th>{{ _('vm.state') }}</th>
+                    <th>{{ _('plugin.status') }}</th>
+                </tr>
+            </thead>
+            <tbody id="container-list-body">
+                <tr><td colspan="5" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadStats();
+    loadContainers();
+    setInterval(loadContainers, 15000);
+});
+
+function loadStats() {
+    fetch('/api/plugins/docker/stats')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            document.getElementById('docker-total').textContent = res.data.total || '-';
+            document.getElementById('docker-running').textContent = res.data.running || '-';
+            document.getElementById('docker-version').textContent = res.data.docker_version || res.source || '-';
+        });
+}
+
+function loadContainers() {
+    fetch('/api/plugins/docker/ps')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const tbody = document.getElementById('container-list-body');
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">{{ _("plugin.no_containers") }}</td></tr>';
+                return;
+            }
+            tbody.innerHTML = res.data.map(c => {
+                const stateClass = c.state === 'running' ? 'running' : 'shutoff';
+                return `<tr>
+                    <td><code>${c.id}</code></td>
+                    <td><strong>${c.name}</strong></td>
+                    <td><span class="badge bg-info">${c.image}</span></td>
+                    <td><span class="vm-status ${stateClass}"><span class="status-dot"></span>${c.state}</span></td>
+                    <td class="small text-muted">${c.status}</td>
+                </tr>`;
+            }).join('');
+        });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.isos') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-disc me-2"></i>{{ _('page.isos') }}</h4>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+        <i class="bi bi-upload"></i> {{ _('iso.upload') }}
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-header">{{ _('storage.iso_list') }}</div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>{{ _('iso.file') }}</th><th>{{ _('iso.size') }}</th><th>{{ _('iso.modified') }}</th><th>{{ _('vm.actions') }}</th></tr></thead>
+            <tbody id="iso-list-body">
+                <tr><td colspan="4" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('iso.upload_title') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="upload-form">
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('iso.select_file') }}</label>
+                        <input type="file" class="form-control" id="iso-file" accept=".iso" required>
+                    </div>
+                    <div class="progress mb-2 d-none" id="upload-progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%"></div>
+                    </div>
+                    <p class="text-muted small">
+                        <i class="bi bi-info-circle"></i> {{ _('iso.supported') }}
+                    </p>
+                    <button type="submit" class="btn btn-primary" id="upload-btn">
+                        <i class="bi bi-cloud-upload"></i> {{ _('iso.upload') }}
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', loadISOs);
+
+function loadISOs() {
+    fetch('/api/isos')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const tbody = document.getElementById('iso-list-body');
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><i class="bi bi-disc"></i><p>{{ _("iso.no_isos") }}</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = res.data.map(iso => `
+                <tr>
+                    <td><strong>${iso.name}</strong></td>
+                    <td>${iso.size_mb} MB</td>
+                    <td><small>${iso.modified}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteISO('${iso.name}')">
+                            <i class="bi bi-trash"></i> {{ _('vm.opt.delete') }}
+                        </button>
+                    </td>
+                </tr>`).join('');
+        });
+}
+
+document.getElementById('upload-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const file = document.getElementById('iso-file').files[0];
+    if (!file) { showToast('{{ _("msg.error") }}', 'error'); return; }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    document.getElementById('upload-progress').classList.remove('d-none');
+    const btn = document.getElementById('upload-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> {{ _("common.operating") }}';
+
+    fetch('/api/isos/upload', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(res => {
+        bootstrap.Modal.getInstance(document.getElementById('uploadModal')).hide();
+        if (res.ok) {
+            showToast(`ISO '${file.name}' {{ _('msg.operate_success') }}`, 'success');
+            loadISOs();
+        } else {
+            showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+        }
+        document.getElementById('upload-progress').classList.add('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-upload"></i> {{ _('iso.upload') }}';
+    })
+    .catch(() => {
+        showToast('{{ _("msg.network_error") }}', 'error');
+        document.getElementById('upload-progress').classList.add('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-upload"></i> {{ _('iso.upload') }}';
+    });
+});
+
+function deleteISO(name) {
+    if (!confirm(`{{ _('common.confirm') }} '${name}'?`)) return;
+    fetch(`/api/isos/${name}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { loadISOs(); showToast('{{ _("msg.operate_success") }}', 'success'); }
+            else showToast(res.error, 'error');
+        });
+}
+</script>
+{% endblock %}

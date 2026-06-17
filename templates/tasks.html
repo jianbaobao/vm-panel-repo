@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.tasks') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-list-check me-2"></i>{{ _('page.tasks') }}</h4>
+    <button class="btn btn-sm btn-outline-danger" onclick="clearTasks()">
+        <i class="bi bi-trash"></i> {{ _('common.clear') }}
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th style="width:80px">ID</th>
+                    <th style="width:120px">{{ _('snapshot.time') }}</th>
+                    <th style="width:100px">{{ _('vm.actions') }}</th>
+                    <th>{{ _('vm.name') }}</th>
+                    <th style="width:100px">{{ _('vm.state') }}</th>
+                    <th style="width:200px">{{ _('common.progress') }}</th>
+                    <th>{{ _('common.detail') }}</th>
+                </tr>
+            </thead>
+            <tbody id="task-list-body">
+                <tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadTasks();
+    setInterval(loadTasks, 3000);
+});
+
+function loadTasks() {
+    fetch('/api/tasks?limit=50')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const tbody = document.getElementById('task-list-body');
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><i class="bi bi-list-check"></i><p>{{ _("task.none") }}</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = res.data.map(t => {
+                const statusMap = {
+                    'pending': ['bg-secondary', ''],
+                    'running': ['bg-primary', 'progress-bar-striped progress-bar-animated'],
+                    'completed': ['bg-success', ''],
+                    'failed': ['bg-danger', ''],
+                    'cancelled': ['bg-warning', ''],
+                };
+                const [bg, extra] = statusMap[t.status] || ['bg-secondary', ''];
+                const time = (t.created_at || '').replace('T', ' ').slice(0, 19);
+
+                return `<tr>
+                    <td><code class="small">${t.id}</code></td>
+                    <td><small>${time}</small></td>
+                    <td><span class="badge bg-secondary">${t.action}</span></td>
+                    <td><code>${t.target}</code></td>
+                    <td><span class="vm-status ${t.status === 'running' ? 'running' : t.status === 'completed' ? 'running' : t.status === 'failed' ? 'crashed' : 'shutoff'}">
+                        <span class="status-dot"></span>${t.status}
+                    </span></td>
+                    <td>
+                        <div class="progress" style="height:8px">
+                            <div class="progress-bar ${bg} ${extra}" style="width:${t.progress}%"></div>
+                        </div>
+                        <small class="text-muted">${t.progress}% ${t.message || ''}</small>
+                    </td>
+                    <td class="small text-muted">${t.error || '-'}</td>
+                </tr>`;
+            }).join('');
+        });
+}
+
+function clearTasks() {
+    fetch('/api/tasks/clear', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { showToast('{{ _("common.clear") }}', 'success'); loadTasks(); }
+        });
+}
+</script>
+{% endblock %}

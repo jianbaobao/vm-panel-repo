@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.network_create') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-plus-circle me-2"></i>{{ _('page.network_create') }}</h4>
+    <a href="/networks" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> {{ _('config.back') }}</a>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header">{{ _('net.config') }}</div>
+            <div class="card-body">
+                <form id="create-network-form">
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('net.name') }}</label>
+                        <input type="text" class="form-control" id="net-name" name="name"
+                               placeholder="my-network" required pattern="[a-zA-Z0-9_-]+">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('net.type') }}</label>
+                        <select class="form-select" id="net-type" name="type">
+                            <option value="nat">{{ _('net.nat_desc') }}</option>
+                            <option value="isolated">{{ _('net.isolated_desc') }}</option>
+                            <option value="route">{{ _('net.route_desc') }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('net.subnet_cidr') }}</label>
+                        <input type="text" class="form-control" id="net-subnet" name="subnet"
+                               value="192.168.100.0/24" placeholder="192.168.1.0/24">
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">{{ _('net.dhcp_start') }}</label>
+                            <input type="text" class="form-control" id="net-dhcp-start" name="dhcp_start"
+                                   value="192.168.100.10">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">{{ _('net.dhcp_end') }}</label>
+                            <input type="text" class="form-control" id="net-dhcp-end" name="dhcp_end"
+                                   value="192.168.100.200">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('net.bridge') }}</label>
+                        <input type="text" class="form-control" id="net-bridge" name="bridge" placeholder="{{ _('net.auto_bridge') }}">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> {{ _('net.create') }}
+                        </button>
+                        <a href="/networks" class="btn btn-outline-secondary">{{ _('common.cancel') }}</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('create-network-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        name: document.getElementById('net-name').value,
+        type: document.getElementById('net-type').value,
+        subnet: document.getElementById('net-subnet').value,
+        dhcp_start: document.getElementById('net-dhcp-start').value,
+        dhcp_end: document.getElementById('net-dhcp-end').value,
+        bridge: document.getElementById('net-bridge').value || undefined,
+    };
+
+    fetch('/api/networks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast(`{{ _('msg.operate_success') }}`, 'success');
+            setTimeout(() => location.href = '/networks', 1000);
+        } else {
+            showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.hypervisors') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-cloud-arrow-down me-2"></i>{{ _('page.hypervisors') }}</h4>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRemoteModal">
+        <i class="bi bi-plus-lg"></i> {{ _('hv.add') }}
+    </button>
+</div>
+
+<!-- 远程连接列表 -->
+<div class="row g-3" id="remote-cards">
+    <div class="col-12 text-center py-5">
+        <div class="spinner-border text-primary"></div>
+    </div>
+</div>
+
+<!-- 添加远程模态框 -->
+<div class="modal fade" id="addRemoteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('hv.add') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="add-remote-form">
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('hv.name') }}</label>
+                        <input type="text" class="form-control" id="remote-name" required placeholder="my-proxmox">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('hv.type') }}</label>
+                        <select class="form-select" id="remote-type">
+                            <option value="proxmox">Proxmox VE</option>
+                            <option value="ovirt">oVirt Engine</option>
+                            <option value="vsphere">VMware vSphere</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('hv.host') }}</label>
+                        <input type="text" class="form-control" id="remote-host" required placeholder="192.168.1.100">
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">{{ _('hv.port') }}</label>
+                            <input type="number" class="form-control" id="remote-port" value="8006">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">{{ _('hv.user') }}</label>
+                            <input type="text" class="form-control" id="remote-user" placeholder="root@pam">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('hv.password') }}</label>
+                        <input type="password" class="form-control" id="remote-password">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">{{ _('common.cancel') }}</button>
+                <button class="btn btn-primary" onclick="addRemote()">{{ _('hv.connect') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', loadRemotes);
+
+function loadRemotes() {
+    fetch('/api/plugins/hypervisors')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const container = document.getElementById('remote-cards');
+            if (res.data.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="empty-state">
+                            <i class="bi bi-cloud-arrow-down"></i>
+                            <p class="mb-2">{{ _('hv.none') }}</p>
+                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addRemoteModal">
+                                {{ _('hv.add') }}
+                            </button>
+                        </div>
+                    </div>`;
+                return;
+            }
+            container.innerHTML = res.data.map(r => {
+                const s = r.status || {};
+                const connected = s.connected;
+                return `
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <h5 class="card-title mb-1">
+                                        <span class="badge bg-${r.type === 'proxmox' ? 'warning' : r.type === 'ovirt' ? 'info' : 'primary'} me-1">${r.type}</span>
+                                        ${r.name}
+                                    </h5>
+                                    <small class="text-muted">${r.host}</small>
+                                </div>
+                                <span class="vm-status ${connected ? 'running' : 'shutoff'}">
+                                    <span class="status-dot"></span>${connected ? '{{ _("net.active") }}' : '{{ _("net.inactive") }}'}
+                                </span>
+                            </div>
+                            ${connected ? `
+                            <div class="row text-center mt-3 g-1">
+                                <div class="col-6">
+                                    <div class="text-info fs-5">${s.vms || '-'}</div>
+                                    <small class="text-muted">{{ _('stat.total') }}</small>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-success fs-5">${s.running || '-'}</div>
+                                    <small class="text-muted">{{ _('stat.running') }}</small>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-primary w-100" onclick="location.href='/plugins/hypervisors/${r.name}'">
+                                    <i class="bi bi-eye"></i> {{ _('common.view_all') }}
+                                </button>
+                            </div>` : `
+                            <div class="alert alert-warning py-2 mb-0 mt-2 small">
+                                <i class="bi bi-exclamation-triangle"></i> ${s.error || '{{ _("hv.disconnected") }}'}
+                            </div>`}
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-danger float-end" onclick="deleteRemote('${r.name}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        });
+}
+
+function addRemote() {
+    const data = {
+        name: document.getElementById('remote-name').value,
+        type: document.getElementById('remote-type').value,
+        host: document.getElementById('remote-host').value,
+        port: parseInt(document.getElementById('remote-port').value),
+        user: document.getElementById('remote-user').value,
+        password: document.getElementById('remote-password').value,
+    };
+    fetch('/api/plugins/hypervisors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(res => {
+        bootstrap.Modal.getInstance(document.getElementById('addRemoteModal')).hide();
+        if (res.ok) {
+            showToast('{{ _("msg.operate_success") }}', 'success');
+            loadRemotes();
+        } else {
+            showToast(res.error, 'error');
+        }
+    });
+}
+
+function deleteRemote(name) {
+    if (!confirm(`{{ _("common.confirm_delete") }} '${name}'?`)) return;
+    fetch(`/api/plugins/hypervisors/${name}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { showToast('{{ _("msg.operate_success") }}', 'success'); loadRemotes(); }
+        });
+}
+</script>
+{% endblock %}

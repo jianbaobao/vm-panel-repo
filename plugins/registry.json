@@ -1,0 +1,11 @@
+{
+  "docker-monitor": {
+    "enabled": false
+  },
+  "remote-hypervisors": {
+    "enabled": true
+  },
+  "port-forwarding": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.vm_create') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-plus-circle me-2"></i>{{ _('vm.create') }}</h4>
+    <a href="/vms" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> {{ _('config.back') }}</a>
+</div>
+
+<form id="create-vm-form">
+    <div class="row g-3">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header"><i class="bi bi-sliders me-2"></i>{{ _('config.basic') }}</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('vm.name') }}</label>
+                        <input type="text" class="form-control" id="vm-name" name="name"
+                               placeholder="my-vm" required pattern="[a-zA-Z0-9_-]+">
+                        <small class="text-muted">{{ _('vm.name') }}: a-z, 0-9, -, _</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('config.template') }}</label>
+                        <div class="row g-2" id="template-select">
+                            {% for key, tmpl in templates.items() %}
+                            <div class="col-md-3 col-6">
+                                <div class="card card-template border-secondary cursor-pointer
+                                    {% if key == 'small' %}border-primary{% endif %}"
+                                     data-template="{{ key }}"
+                                     data-vcpu="{{ tmpl.vcpu }}"
+                                     data-memory="{{ tmpl.memory_mb }}"
+                                     data-disk="{{ tmpl.disk_gb }}">
+                                    <div class="card-body text-center p-2">
+                                        <div class="fw-bold small">{{ _( 'template.' + key ) }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">{{ _('config.cpu') }}</label>
+                            <input type="number" class="form-control" id="vm-vcpu" name="vcpu"
+                                   value="2" min="1" max="128">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">{{ _('config.memory_mb') }}</label>
+                            <input type="number" class="form-control" id="vm-memory" name="memory_mb"
+                                   value="2048" min="256" step="256">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">{{ _('config.disk_gb') }}</label>
+                            <input type="number" class="form-control" id="vm-disk" name="disk_gb"
+                                   value="20" min="1" step="5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header"><i class="bi bi-diagram-3 me-2"></i>{{ _('config.network') }}</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('config.network') }}</label>
+                        <select class="form-select" name="network" id="vm-network">
+                            {% for net in networks %}
+                            <option value="{{ net.name }}">{{ net.name }} ({{ net.type }} — {{ net.subnet }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('config.network_model') }}</label>
+                        <select class="form-select" name="network_model">
+                            <option value="virtio">virtio ({{ _('common.recommend') }})</option>
+                            <option value="e1000e">e1000e (Intel)</option>
+                            <option value="rtl8139">rtl8139</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header"><i class="bi bi-disc me-2"></i>{{ _('config.iso') }}</div>
+                <div class="card-body">
+                    <label class="form-label">{{ _('config.iso') }}</label>
+                    <select class="form-select" name="iso_path" id="vm-iso">
+                        <option value="">{{ _('config.iso_none') }}</option>
+                        {% for iso in isos %}
+                        <option value="{{ iso.path }}">{{ iso.name }} ({{ iso.size_mb }} MB)</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted d-block mt-2">
+                        <i class="bi bi-info-circle"></i> <a href="/isos" class="text-info">{{ _('iso.upload') }}</a>
+                    </small>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header"><i class="bi bi-ubuntu me-2"></i>{{ _('config.os_type') }}</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('config.os_type') }}</label>
+                        <select class="form-select" name="os_type">
+                            <option value="linux">Linux</option>
+                            <option value="windows">Windows</option>
+                            <option value="other">{{ _('common.other') }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('config.os_variant') }}</label>
+                        <select class="form-select" name="os_variant">
+                            <option value="ubuntu24.04">Ubuntu 24.04</option>
+                            <option value="ubuntu22.04">Ubuntu 22.04</option>
+                            <option value="debian12">Debian 12</option>
+                            <option value="centos9">CentOS Stream 9</option>
+                            <option value="rocky9">Rocky Linux 9</option>
+                            <option value="win11">Windows 11</option>
+                            <option value="win10">Windows 10</option>
+                            <option value="win2022">Windows Server 2022</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg" id="create-btn">
+                            <i class="bi bi-plus-circle"></i> {{ _('config.create_btn') }}
+                        </button>
+                        <a href="/vms" class="btn btn-outline-secondary">{{ _('common.cancel') }}</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.card-template').forEach(card => {
+        card.addEventListener('click', function() {
+            document.querySelectorAll('.card-template').forEach(c => c.classList.remove('border-primary'));
+            this.classList.add('border-primary');
+            document.getElementById('vm-vcpu').value = this.dataset.vcpu;
+            document.getElementById('vm-memory').value = this.dataset.memory;
+            document.getElementById('vm-disk').value = this.dataset.disk;
+        });
+    });
+
+    document.getElementById('create-vm-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('create-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> {{ _("common.operating") }}';
+
+        const data = {
+            name: document.getElementById('vm-name').value,
+            vcpu: parseInt(document.getElementById('vm-vcpu').value),
+            memory_mb: parseInt(document.getElementById('vm-memory').value),
+            disk_gb: parseInt(document.getElementById('vm-disk').value),
+            network: document.getElementById('vm-network').value,
+            iso_path: document.getElementById('vm-iso').value,
+        };
+
+        fetch('/api/vms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) {
+                showToast(`VM '${data.name}' {{ _('msg.operate_success') }}`, 'success');
+                setTimeout(() => location.href = `/vms/${data.name}`, 1000);
+            } else {
+                showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-plus-circle"></i> {{ _('config.create_btn') }}';
+            }
+        })
+        .catch(() => {
+            showToast('{{ _("msg.network_error") }}', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-plus-circle"></i> {{ _('config.create_btn') }}';
+        });
+    });
+});
+</script>
+{% endblock %}

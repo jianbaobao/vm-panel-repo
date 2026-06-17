@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.events') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-clock-history me-2"></i>{{ _('page.events') }}</h4>
+    <div>
+        <select class="form-select form-select-sm d-inline-block w-auto me-2" id="event-filter" onchange="loadEvents()">
+            <option value="">{{ _('common.all') }}</option>
+            <option value="create">{{ _('vm.create') }}</option>
+            <option value="start">{{ _('vm.opt.start') }}</option>
+            <option value="shutdown">{{ _('vm.opt.shutdown') }}</option>
+            <option value="force-stop">{{ _('vm.opt.force_stop') }}</option>
+            <option value="restart">{{ _('vm.opt.restart') }}</option>
+            <option value="delete">{{ _('vm.opt.delete') }}</option>
+            <option value="clone">{{ _('vm.clone') }}</option>
+            <option value="net-create">{{ _('net.create') }}</option>
+            <option value="net-delete">{{ _('vm.opt.delete') }} {{ _('nav.networks') }}</option>
+        </select>
+        <button class="btn btn-sm btn-outline-danger" onclick="clearEvents()">
+            <i class="bi bi-trash"></i> {{ _('common.clear') }}
+        </button>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:60px">#</th>
+                            <th style="width:160px">{{ _('snapshot.time') }}</th>
+                            <th style="width:100px">{{ _('vm.actions') }}</th>
+                            <th style="width:200px">{{ _('vm.name') }}</th>
+                            <th>{{ _('common.detail') }}</th>
+                            <th style="width:80px">{{ _('vm.state') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="event-list-body">
+                        <tr><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-pie-chart me-2"></i>{{ _('common.stats') }}</div>
+            <div class="card-body" id="event-stats-body">
+                <div class="spinner-border text-primary"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadEvents();
+    loadStats();
+    setInterval(loadEvents, 15000);
+});
+
+function loadEvents() {
+    const filter = document.getElementById('event-filter').value;
+    let url = '/api/events?limit=100';
+    if (filter) url += '&action=' + encodeURIComponent(filter);
+
+    fetch(url)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const { events, total } = res.data;
+            const tbody = document.getElementById('event-list-body');
+            if (events.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">{{ _("common.no_data") }}</td></tr>';
+                return;
+            }
+            tbody.innerHTML = events.map(e => {
+                const resultClass = e.result === 'success' ? 'text-success' : 'text-danger';
+                return `<tr>
+                    <td class="text-muted">${e.id}</td>
+                    <td><small>${e.time.replace('T', ' ').slice(0, 19)}</small></td>
+                    <td><span class="badge bg-secondary">${e.action}</span></td>
+                    <td><code>${e.target}</code></td>
+                    <td class="small text-muted">${e.detail || '-'}</td>
+                    <td class="${resultClass}"><i class="bi bi-${e.result === 'success' ? 'check-circle' : 'x-circle'}"></i></td>
+                </tr>`;
+            }).join('');
+        });
+}
+
+function loadStats() {
+    fetch('/api/events/stats')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const s = res.data;
+            let html = `<p class="mb-2">{{ _('common.total') }}: <strong>${s.total}</strong></p><hr class="my-2">`;
+            const actions = s.actions || {};
+            const maxVal = Math.max(...Object.values(actions), 1);
+            Object.entries(actions).sort((a, b) => b[1] - a[1]).forEach(([action, count]) => {
+                const pct = (count / maxVal * 100).toFixed(0);
+                html += `<div class="mb-1">
+                    <div class="d-flex justify-content-between small">
+                        <span>${action}</span><span>${count}</span>
+                    </div>
+                    <div class="progress" style="height:4px">
+                        <div class="progress-bar bg-info" style="width:${pct}%"></div>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('event-stats-body').innerHTML = html;
+        });
+}
+
+function clearEvents() {
+    if (!confirm('{{ _("common.confirm_delete") }}?')) return;
+    document.getElementById('event-list-body').innerHTML =
+        '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>';
+    // 直接清空 events.json
+    fetch('/api/events', { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { loadEvents(); loadStats(); }
+        });
+}
+</script>
+{% endblock %}

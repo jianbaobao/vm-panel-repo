@@ -1,0 +1,34 @@
+# VM Panel — Git 忽略规则
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+*.egg
+
+# 运行时数据
+config/*.json
+storage/images/
+storage/isos/
+storage/
+
+# 构建产物
+dist/*.zip
+dist/*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 临时文件 (WSL 测试遗留)
+wsl_*.b64
+wsl_*.txt
+encode_script.py

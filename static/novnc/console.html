@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VNC Console</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+        #vnc-container { width: 100%; height: 100%; }
+        #status-bar {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.8); color: #ccc; padding: 6px 12px;
+            font-size: 13px; font-family: monospace; display: flex; gap: 16px;
+            z-index: 100; border-top: 1px solid #333;
+        }
+        #status-bar .status-dot {
+            width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+            margin-right: 6px; vertical-align: middle;
+        }
+        .dot-connected { background-color: #4caf50; }
+        .dot-disconnected { background-color: #f44336; }
+        .dot-connecting { background-color: #ff9800; }
+        #toolbar {
+            position: fixed; top: 0; right: 0; padding: 8px; z-index: 100;
+            display: flex; gap: 6px;
+        }
+        #toolbar button {
+            background: rgba(0,0,0,0.6); color: #fff; border: 1px solid #555;
+            padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+        }
+        #toolbar button:hover { background: rgba(255,255,255,0.1); }
+        #keyboard-input {
+            position: fixed; left: -9999px; top: -9999px; opacity: 0; width: 1px; height: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <button onclick="sendKey('Ctrl+Alt+Del')">Ctrl+Alt+Del</button>
+        <button onclick="sendKey('Alt+F4')">Alt+F4</button>
+        <button onclick="toggleFullscreen()">Fullscreen</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    <div id="vnc-container"></div>
+    <div id="status-bar">
+        <span><span class="status-dot dot-disconnected" id="status-dot"></span><span id="status-text">Disconnected</span></span>
+        <span id="host-info">-</span>
+    </div>
+    <input id="keyboard-input" autofocus>
+
+    <script src="https://cdn.jsdelivr.net/npm/@novnc/novnc@1.7.0/dist/vnc.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const VM_NAME = urlParams.get('vm') || 'unknown';
+
+        let rfb = null;
+        let connected = false;
+
+        function updateStatus(text, cls) {
+            document.getElementById('status-text').textContent = text;
+            document.getElementById('status-dot').className = 'status-dot dot-' + cls;
+        }
+
+        function connect() {
+            // 通过 HTTP 端口查询方式：先获取 VNC 端口
+            fetch(`/api/vms/${VM_NAME}/vnc-port`)
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.ok) throw new Error(res.error || 'Failed');
+                    const { port, host } = res.data;
+                    if (port <= 0) throw new Error('VNC port not available');
+
+                    // 对于模拟模式，显示提示
+                    if (port === 5900 && host === 'localhost' && !res.data.real) {
+                        updateStatus('Simulation Mode — VNC not available', 'disconnected');
+                        document.getElementById('host-info').textContent =
+                            'Simulated VNC port 5900 (no real VM)';
+                        return;
+                    }
+
+                    updateStatus('Connecting...', 'connecting');
+                    document.getElementById('host-info').textContent = `${host}:${port}`;
+
+                    // 使用 noVNC 直接连接 (需要浏览器支持 WebSocket)
+                    // 对于 QEMU VNC，端口号 + 5900 = websocket 端口
+                    const wsPort = port;
+                    const wsUrl = `ws://${host}:${wsPort}`;
+
+                    try {
+                        rfb = new RFB(document.getElementById('vnc-container'), wsUrl, {
+                            credentials: { password: '' },
+                            shared: true,
+                        });
+
+                        rfb.addEventListener('connect', () => {
+                            connected = true;
+                            updateStatus('Connected', 'connected');
+                            document.getElementById('keyboard-input').focus();
+                        });
+
+                        rfb.addEventListener('disconnect', (e) => {
+                            connected = false;
+                            updateStatus('Disconnected: ' + (e.detail || ''), 'disconnected');
+                        });
+
+                        rfb.addEventListener('securityfailure', (e) => {
+                            updateStatus('Auth Failed: ' + (e.detail || ''), 'disconnected');
+                        });
+
+                        rfb.scaleViewport = true;
+                        rfb.resizeSession = true;
+                    } catch (e) {
+                        updateStatus('Connection Error: ' + e.message, 'disconnected');
+                    }
+                })
+                .catch(err => {
+                    updateStatus('Error: ' + err.message, 'disconnected');
+                });
+        }
+
+        function disconnect() {
+            if (rfb) {
+                rfb.disconnect();
+                rfb = null;
+            }
+            updateStatus('Disconnected', 'disconnected');
+        }
+
+        function sendKey(combo) {
+            if (!rfb || !connected) return;
+            const keys = combo.split('+');
+            const key = keys.pop();
+            let ctrl = false, alt = false, shift = false;
+            keys.forEach(k => {
+                if (k === 'Ctrl') ctrl = true;
+                if (k === 'Alt') alt = true;
+                if (k === 'Shift') shift = true;
+            });
+            // Map key names to keysym
+            const keyMap = {
+                'Delete': 0xffff, 'F4': 0xffc4,
+            };
+            const keysym = keyMap[key] || key.toUpperCase().charCodeAt(0);
+            if (ctrl) rfb.sendKey(0xffe3, 1);  // Ctrl down
+            if (alt) rfb.sendKey(0xffe9, 1);   // Alt down
+            rfb.sendKey(keysym, 1);
+            rfb.sendKey(keysym, 0);
+            if (alt) rfb.sendKey(0xffe9, 0);   // Alt up
+            if (ctrl) rfb.sendKey(0xffe3, 0);  // Ctrl up
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // 自动连接
+        document.addEventListener('DOMContentLoaded', connect);
+
+        // 键盘快捷键: 点击容器时聚焦到隐藏输入
+        document.getElementById('vnc-container').addEventListener('click', () => {
+            document.getElementById('keyboard-input').focus();
+        });
+    </script>
+</body>
+</html>

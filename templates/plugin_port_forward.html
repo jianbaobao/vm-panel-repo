@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{{ _('port_forward.title') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-router me-2"></i>{{ _('port_forward.title') }}</h4>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#ruleModal">
+        <i class="bi bi-plus-lg"></i> {{ _('port_forward.add') }}
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>{{ _('port_forward.proto') }}</th>
+                    <th>{{ _('port_forward.host_port') }}</th>
+                    <th>{{ _('port_forward.vm_ip') }}</th>
+                    <th>{{ _('port_forward.vm_port') }}</th>
+                    <th>Remark</th>
+                    <th>{{ _('net.state') }}</th>
+                    <th>{{ _('vm.actions') }}</th>
+                </tr>
+            </thead>
+            <tbody id="rule-list-body">
+                <tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="ruleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('port_forward.add') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">{{ _('port_forward.proto') }}</label>
+                    <select class="form-select" id="pf-proto">
+                        <option value="tcp">TCP</option>
+                        <option value="udp">UDP</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('port_forward.host_port') }}</label>
+                    <input type="number" class="form-control" id="pf-host-port" min="1" max="65535" value="8080">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('port_forward.vm_ip') }}</label>
+                    <input type="text" class="form-control" id="pf-vm-ip" placeholder="192.168.122.100">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('port_forward.vm_port') }}</label>
+                    <input type="number" class="form-control" id="pf-vm-port" min="1" max="65535" value="80">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Remark</label>
+                    <input type="text" class="form-control" id="pf-remark" placeholder="Web Server">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">{{ _('common.cancel') }}</button>
+                <button class="btn btn-primary" onclick="addRule()">{{ _('common.confirm') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadRules();
+    setInterval(loadRules, 5000);
+});
+
+function loadRules() {
+    fetch('/api/plugins/port-forward/rules')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const tbody = document.getElementById('rule-list-body');
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><i class="bi bi-router"></i><p>{{ _("port_forward.no_rules") }}</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = res.data.map(r => `
+                <tr>
+                    <td class="text-muted">${r.id}</td>
+                    <td><span class="badge bg-secondary">${r.proto}</span></td>
+                    <td><code>${r.host_port}</code></td>
+                    <td><code>${r.vm_ip}</code></td>
+                    <td><code>${r.vm_port}</code></td>
+                    <td class="small">${r.remark || '-'}</td>
+                    <td>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch"
+                                   ${r.enabled ? 'checked' : ''}
+                                   onchange="toggleRule(${r.id}, this.checked)">
+                        </div>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteRule(${r.id})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>`).join('');
+        });
+}
+
+function addRule() {
+    const data = {
+        proto: document.getElementById('pf-proto').value,
+        host_port: parseInt(document.getElementById('pf-host-port').value),
+        vm_ip: document.getElementById('pf-vm-ip').value,
+        vm_port: parseInt(document.getElementById('pf-vm-port').value),
+        remark: document.getElementById('pf-remark').value,
+        enabled: true,
+    };
+    fetch('/api/plugins/port-forward/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(res => {
+        bootstrap.Modal.getInstance(document.getElementById('ruleModal')).hide();
+        if (res.ok) { showToast('{{ _("msg.operate_success") }}', 'success'); loadRules(); }
+        else showToast(res.error, 'error');
+    });
+}
+
+function deleteRule(id) {
+    if (!confirm('{{ _("common.confirm_delete") }}?')) return;
+    fetch(`/api/plugins/port-forward/rules/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { showToast('{{ _("msg.operate_success") }}', 'success'); loadRules(); }
+        });
+}
+
+function toggleRule(id, enabled) {
+    fetch(`/api/plugins/port-forward/rules/${id}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (!res.ok) showToast(res.error, 'error');
+    });
+}
+</script>
+{% endblock %}

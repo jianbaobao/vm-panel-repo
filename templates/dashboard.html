@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.dashboard') }}{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card border-success">
+            <div class="card-body">
+                <i class="bi bi-display stat-icon"></i>
+                <div class="stat-value text-success" id="vm-running-count">0</div>
+                <div class="stat-label">{{ _('stat.running') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card border-secondary">
+            <div class="card-body">
+                <i class="bi bi-display stat-icon"></i>
+                <div class="stat-value" id="vm-total-count">0</div>
+                <div class="stat-label">{{ _('stat.total') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card border-info">
+            <div class="card-body">
+                <i class="bi bi-cpu stat-icon"></i>
+                <div class="stat-value text-info" id="host-cpu">-</div>
+                <div class="stat-label">{{ _('stat.cpu') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card border-warning">
+            <div class="card-body">
+                <i class="bi bi-memory stat-icon"></i>
+                <div class="stat-value text-warning" id="host-memory">-</div>
+                <div class="stat-label">{{ _('stat.memory') }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-hdd-network me-2"></i>{{ _('host.info') }}
+            </div>
+            <div class="card-body" id="host-info-body">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">{{ _('common.loading') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-database me-2"></i>{{ _('storage.overview') }}
+            </div>
+            <div class="card-body" id="storage-info-body">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">{{ _('common.loading') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-2">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list-ul me-2"></i>{{ _('page.vms') }}</span>
+                <a href="/vms" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-eye"></i> {{ _('common.view_all') }}
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="vm-overview-table">
+                        <thead>
+                            <tr>
+                                <th>{{ _('vm.name') }}</th>
+                                <th>{{ _('vm.state') }}</th>
+                                <th>{{ _('vm.vcpu') }}</th>
+                                <th>{{ _('vm.memory') }}</th>
+                                <th>{{ _('vm.uptime') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vm-overview-body">
+                            <tr><td colspan="5" class="text-center text-muted py-3">{{ _('common.loading') }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Translations for JS
+const LANG_STRINGS = {
+    loading: '{{ _("common.loading") }}',
+    no_vms: '{{ _("vm.no_vms") }}',
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadHostInfo();
+    loadHostStats();
+    loadVMList();
+});
+
+function loadHostInfo() {
+    fetch('/api/host/info')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const h = res.data;
+            document.getElementById('host-info-body').innerHTML = `
+                <div class="row g-2">
+                    <div class="col-6"><small class="text-muted">{{ _('host.hostname') }}</small><br><strong>${h.hostname}</strong></div>
+                    <div class="col-6"><small class="text-muted">{{ _('host.arch') }}</small><br><strong>${h.arch}</strong></div>
+                    <div class="col-6"><small class="text-muted">{{ _('host.cpu') }}</small><br><strong>${h.cpus} {{ _('host.cores') }}</strong></div>
+                    <div class="col-6"><small class="text-muted">{{ _('host.cpu_model') }}</small><br><strong>${h.cpu_model}</strong></div>
+                    <div class="col-6"><small class="text-muted">{{ _('host.total_mem') }}</small><br><strong>${(h.memory_total_mb/1024).toFixed(1)} GB</strong></div>
+                    <div class="col-6"><small class="text-muted">{{ _('host.free_mem') }}</small><br><strong>${(h.memory_free_mb/1024).toFixed(1)} GB</strong></div>
+                </div>
+            `;
+        });
+}
+
+function loadHostStats() {
+    fetch('/api/host/stats')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const s = res.data;
+            document.getElementById('host-cpu').textContent = `${s.cpu_percent}%`;
+            document.getElementById('host-memory').textContent = `${s.memory_percent}%`;
+
+            if (s.disk_usage && s.disk_usage.total_gb) {
+                const du = s.disk_usage;
+                document.getElementById('storage-info-body').innerHTML = `
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>{{ _('storage.disk_usage') }}</span>
+                        <span>${du.used_gb} GB / ${du.total_gb} GB</span>
+                    </div>
+                    <div class="progress mb-3">
+                        <div class="progress-bar ${du.percent > 80 ? 'bg-danger' : du.percent > 60 ? 'bg-warning' : 'bg-success'}"
+                             style="width: ${du.percent}%"></div>
+                    </div>
+                    <div class="row text-center mt-3">
+                        <div class="col-4">
+                            <div class="text-success fs-5">${du.total_gb}</div>
+                            <small class="text-muted">{{ _('storage.total') }} (GB)</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-warning fs-5">${du.used_gb}</div>
+                            <small class="text-muted">{{ _('storage.used') }} (GB)</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-info fs-5">${du.free_gb}</div>
+                            <small class="text-muted">{{ _('storage.available') }} (GB)</small>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+}
+
+function loadVMList() {
+    fetch('/api/vms')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const vms = res.data;
+            const running = vms.filter(v => v.state === 'running').length;
+            document.getElementById('vm-running-count').textContent = running;
+            document.getElementById('vm-total-count').textContent = vms.length;
+
+            const tbody = document.getElementById('vm-overview-body');
+            if (vms.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">' + LANG_STRINGS.no_vms + '</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = vms.map(vm => {
+                const uptime = vm.uptime_seconds
+                    ? Math.floor(vm.uptime_seconds / 3600) + 'h ' + Math.floor((vm.uptime_seconds % 3600) / 60) + 'm'
+                    : '-';
+                return `<tr class="cursor-pointer" onclick="location.href='/vms/${vm.name}'">
+                    <td><strong>${vm.name}</strong></td>
+                    <td><span class="vm-status ${vm.state}"><span class="status-dot"></span>${vm.state}</span></td>
+                    <td>${vm.vcpu}</td>
+                    <td>${(vm.memory_mb / 1024).toFixed(1)} GB</td>
+                    <td>${uptime}</td>
+                </tr>`;
+            }).join('');
+        });
+}
+</script>
+{% endblock %}

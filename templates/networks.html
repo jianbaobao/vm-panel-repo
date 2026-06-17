@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.networks') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>{{ _('nav.networks') }}</h4>
+    <a href="/networks/create" class="btn btn-primary"><i class="bi bi-plus-lg"></i> {{ _('net.create') }}</a>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-diagram-3 me-2"></i>{{ _('page.networks') }}</div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>{{ _('net.name') }}</th><th>{{ _('net.type') }}</th><th>{{ _('net.bridge') }}</th><th>{{ _('net.subnet') }}</th><th>{{ _('net.dhcp') }}</th><th>{{ _('net.state') }}</th><th>{{ _('vm.actions') }}</th></tr></thead>
+                    <tbody id="network-list-body">
+                        <tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-layers me-2"></i>{{ _('net.system_bridges') }}</span>
+                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#bridgeModal">
+                    <i class="bi bi-plus"></i>
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead><tr><th>{{ _('net.name') }}</th><th>MAC</th><th>{{ _('net.state') }}</th></tr></thead>
+                    <tbody id="bridge-list-body">
+                        <tr><td colspan="3" class="text-center text-muted py-3">{{ _('common.loading') }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="bridgeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('net.create_bridge') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">{{ _('net.bridge_name') }}</label>
+                    <input type="text" class="form-control" id="bridge-name" value="br0">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('net.bridge_interface') }}</label>
+                    <input type="text" class="form-control" id="bridge-interface" placeholder="eth0">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">{{ _('common.cancel') }}</button>
+                <button class="btn btn-primary" onclick="createBridge()">{{ _('common.confirm') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadNetworks();
+    loadBridges();
+});
+
+function loadNetworks() {
+    fetch('/api/networks')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const tbody = document.getElementById('network-list-body');
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><i class="bi bi-diagram-3"></i><p>{{ _("net.no_nets") }}</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = res.data.map(n => `
+                <tr>
+                    <td><strong>${n.name}</strong></td>
+                    <td><span class="badge ${n.type === 'nat' ? 'bg-info' : n.type === 'bridge' ? 'bg-success' : 'bg-secondary'}">${n.type}</span></td>
+                    <td><code>${n.bridge}</code></td>
+                    <td>${n.subnet}</td>
+                    <td>${n.dhcp?.start || '-'} → ${n.dhcp?.end || '-'}</td>
+                    <td>${n.active ? '<span class="text-success"><i class="bi bi-check-circle-fill"></i> {{ _("net.active") }}</span>' : '<span class="text-muted"><i class="bi bi-circle"></i> {{ _("net.inactive") }}</span>'}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            ${n.active
+                                ? `<button class="btn btn-outline-warning" onclick="toggleNetwork('${n.name}', 'deactivate')"><i class="bi bi-pause-fill"></i></button>`
+                                : `<button class="btn btn-outline-success" onclick="toggleNetwork('${n.name}', 'activate')"><i class="bi bi-play-fill"></i></button>`
+                            }
+                            <button class="btn btn-outline-danger" onclick="deleteNetwork('${n.name}')"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>`).join('');
+        });
+}
+
+function loadBridges() {
+    fetch('/api/bridges')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const tbody = document.getElementById('bridge-list-body');
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">{{ _("net.no_nets") }}</td></tr>';
+                return;
+            }
+            tbody.innerHTML = res.data.map(b => `
+                <tr>
+                    <td><code>${b.name}</code></td>
+                    <td class="small">${b.mac}</td>
+                    <td><span class="text-${b.state === 'up' ? 'success' : 'danger'}">${b.state}</span></td>
+                </tr>`).join('');
+        });
+}
+
+function toggleNetwork(name, action) {
+    fetch(`/api/networks/${name}/${action}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { loadNetworks(); showToast(`${name}: ${action}`, 'info'); }
+            else showToast(res.error, 'error');
+        });
+}
+
+function deleteNetwork(name) {
+    if (!confirm(`{{ _('common.confirm') }} '${name}'?`)) return;
+    fetch(`/api/networks/${name}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { loadNetworks(); showToast('{{ _("msg.operate_success") }}', 'success'); }
+            else showToast(res.error, 'error');
+        });
+}
+
+function createBridge() {
+    const name = document.getElementById('bridge-name').value;
+    const iface = document.getElementById('bridge-interface').value;
+    fetch('/api/bridges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, interface: iface }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        bootstrap.Modal.getInstance(document.getElementById('bridgeModal')).hide();
+        if (res.ok) { loadBridges(); showToast('{{ _("msg.operate_success") }}', 'success'); }
+        else showToast(res.error, 'error');
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.storage') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-database me-2"></i>{{ _('nav.storage') }}</h4>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#poolModal">
+        <i class="bi bi-plus-lg"></i> {{ _('storage.create_pool') }}
+    </button>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header"><i class="bi bi-boxes me-2"></i>{{ _('storage.pools') }}</div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>{{ _('pool.name') }}</th><th>{{ _('pool.type') }}</th><th>{{ _('pool.path') }}</th><th>{{ _('pool.used') }}</th><th>{{ _('pool.free') }}</th><th>{{ _('pool.usage') }}</th><th>{{ _('net.state') }}</th><th>{{ _('vm.actions') }}</th></tr></thead>
+            <tbody id="pool-list-body">
+                <tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-hdd me-2"></i>{{ _('storage.volumes') }}</span>
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#volumeModal">
+            <i class="bi bi-plus"></i> {{ _('storage.create_volume') }}
+        </button>
+    </div>
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead><tr><th>{{ _('vol.name') }}</th><th>{{ _('vol.pool') }}</th><th>{{ _('vol.capacity') }}</th><th>{{ _('vol.allocated') }}</th><th>{{ _('vol.format') }}</th><th>{{ _('pool.path') }}</th><th>{{ _('vm.actions') }}</th></tr></thead>
+            <tbody id="volume-list-body">
+                <tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="poolModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('storage.create_pool') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">{{ _('pool.name') }}</label>
+                    <input type="text" class="form-control" id="pool-name" value="vm-images">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('pool.type') }}</label>
+                    <select class="form-select" id="pool-type">
+                        <option value="dir">{{ _('pool.type') }} (dir)</option>
+                        <option value="logical">LVM</option>
+                        <option value="fs">{{ _('common.other') }} (fs)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('pool.path') }}</label>
+                    <input type="text" class="form-control" id="pool-path" placeholder="/var/lib/libvirt/images">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">{{ _('common.cancel') }}</button>
+                <button class="btn btn-primary" onclick="createPool()">{{ _('common.confirm') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="volumeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('storage.create_volume') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">{{ _('vol.name') }}</label>
+                    <input type="text" class="form-control" id="vol-name" value="new-volume.qcow2">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('vol.pool') }}</label>
+                    <select class="form-select" id="vol-pool"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('vol.size_gb') }}</label>
+                    <input type="number" class="form-control" id="vol-size" value="20" min="1">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ _('vol.format') }}</label>
+                    <select class="form-select" id="vol-format">
+                        <option value="qcow2">qcow2</option>
+                        <option value="raw">raw</option>
+                        <option value="qed">qed</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">{{ _('common.cancel') }}</button>
+                <button class="btn btn-primary" onclick="createVolume()">{{ _('common.confirm') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadPools();
+    loadVolumes();
+});
+
+function formatBytes(bytes) {
+    if (!bytes) return '-';
+    const gb = bytes / (1024**3);
+    if (gb >= 1) return gb.toFixed(1) + ' GB';
+    const mb = bytes / (1024**2);
+    return mb.toFixed(0) + ' MB';
+}
+
+function loadPools() {
+    fetch('/api/pools')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const tbody = document.getElementById('pool-list-body');
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><i class="bi bi-database"></i><p>{{ _("pool.no_pools") }}</p></div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = res.data.map(p => {
+                const pct = p.capacity_bytes > 0
+                    ? ((p.allocation_bytes / p.capacity_bytes) * 100).toFixed(1)
+                    : 0;
+                return `<tr>
+                    <td><strong>${p.name}</strong></td>
+                    <td><span class="badge bg-secondary">${p.type}</span></td>
+                    <td class="small"><code>${p.path || '-'}</code></td>
+                    <td>${formatBytes(p.allocation_bytes)}</td>
+                    <td>${formatBytes(p.available_bytes)}</td>
+                    <td>
+                        <div class="progress" style="height:6px">
+                            <div class="progress-bar ${pct > 80 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success'}"
+                                 style="width:${pct}%"></div>
+                        </div>
+                        <small>${pct}%</small>
+                    </td>
+                    <td>${p.active ? '<span class="text-success"><i class="bi bi-check-circle-fill"></i></span>' : '<span class="text-danger"><i class="bi bi-x-circle-fill"></i></span>'}</td>
+                    <td><button class="btn btn-sm btn-outline-danger" onclick="deletePool('${p.name}')"><i class="bi bi-trash"></i></button></td>
+                </tr>`;
+            }).join('');
+
+            const sel = document.getElementById('vol-pool');
+            sel.innerHTML = res.data.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+        });
+}
+
+function loadVolumes() {
+    fetch('/api/pools')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok || res.data.length === 0) return;
+            const poolName = res.data[0].name;
+            fetch(`/api/pools/${poolName}/volumes`)
+                .then(r2 => r2.json())
+                .then(res2 => {
+                    const tbody = document.getElementById('volume-list-body');
+                    if (!res2.ok || res2.data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">{{ _("vol.no_vols") }}</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = res2.data.map(v => `
+                        <tr>
+                            <td><strong>${v.name}</strong></td>
+                            <td>${v.pool}</td>
+                            <td>${formatBytes(v.capacity_bytes)}</td>
+                            <td>${formatBytes(v.allocation_bytes)}</td>
+                            <td><code>${v.format}</code></td>
+                            <td class="small"><code>${v.path || '-'}</code></td>
+                            <td><button class="btn btn-sm btn-outline-danger" onclick="deleteVolume('${v.pool}', '${v.name}')"><i class="bi bi-trash"></i></button></td>
+                        </tr>`).join('');
+                });
+        });
+}
+
+function createPool() {
+    const data = {
+        name: document.getElementById('pool-name').value,
+        type: document.getElementById('pool-type').value,
+        path: document.getElementById('pool-path').value,
+    };
+    fetch('/api/pools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(res => {
+        bootstrap.Modal.getInstance(document.getElementById('poolModal')).hide();
+        if (res.ok) { loadPools(); showToast('{{ _("msg.operate_success") }}', 'success'); }
+        else showToast(res.error, 'error');
+    });
+}
+
+function deletePool(name) {
+    if (!confirm(`{{ _('pool.delete_confirm') }} '${name}'?`)) return;
+    fetch(`/api/pools/${name}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { loadPools(); showToast('{{ _("msg.operate_success") }}', 'success'); }
+            else showToast(res.error, 'error');
+        });
+}
+
+function createVolume() {
+    const poolName = document.getElementById('vol-pool').value;
+    const data = {
+        name: document.getElementById('vol-name').value,
+        size_gb: parseInt(document.getElementById('vol-size').value),
+        format: document.getElementById('vol-format').value,
+    };
+    fetch(`/api/pools/${poolName}/volumes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(res => {
+        bootstrap.Modal.getInstance(document.getElementById('volumeModal')).hide();
+        if (res.ok) { loadVolumes(); showToast('{{ _("msg.operate_success") }}', 'success'); }
+        else showToast(res.error, 'error');
+    });
+}
+
+function deleteVolume(pool, name) {
+    if (!confirm(`{{ _('vol.delete_confirm') }} '${name}'?`)) return;
+    fetch(`/api/pools/${pool}/volumes/${name}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) { loadVolumes(); showToast('{{ _("msg.operate_success") }}', 'success'); }
+            else showToast(res.error, 'error');
+        });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "proto": "tcp",
+    "host_port": 2222,
+    "vm_ip": "192.168.122.100",
+    "vm_port": 22,
+    "remark": "SSH -> VM1",
+    "enabled": true
+  },
+  {
+    "id": 2,
+    "proto": "tcp",
+    "host_port": 8081,
+    "vm_ip": "192.168.122.100",
+    "vm_port": 80,
+    "remark": "HTTP -> VM1",
+    "enabled": true
+  }
+]

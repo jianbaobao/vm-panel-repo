@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.vm_detail') }}: {{ vm.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/vms" class="btn btn-sm btn-outline-secondary me-2"><i class="bi bi-arrow-left"></i></a>
+        <h4 class="d-inline mb-0"><i class="bi bi-display me-2"></i>{{ vm.name }}</h4>
+        <span class="vm-status {{ vm.state }} ms-2"><span class="status-dot"></span>{{ vm.state }}</span>
+    </div>
+    <div class="btn-group">
+        {% if vm.state == 'running' %}
+        <button class="btn btn-outline-warning" onclick="operate('shutdown')"><i class="bi bi-stop-circle"></i> {{ _('vm.opt.shutdown') }}</button>
+        <button class="btn btn-outline-danger" onclick="operate('force-stop')"><i class="bi bi-power"></i> {{ _('vm.opt.force_stop') }}</button>
+        <button class="btn btn-outline-info" onclick="operate('restart')"><i class="bi bi-arrow-repeat"></i> {{ _('vm.opt.restart') }}</button>
+        {% else %}
+        <button class="btn btn-outline-success" onclick="operate('start')"><i class="bi bi-play-fill"></i> {{ _('vm.opt.start') }}</button>
+        {% endif %}
+        <button class="btn btn-outline-primary" onclick="cloneVM()"><i class="bi bi-copy"></i> {{ _('vm.clone') }}</button>
+        <button class="btn btn-outline-secondary" onclick="viewXML()"><i class="bi bi-filetype-xml"></i> {{ _('vm.xml_view') }}</button>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>{{ _('vm.basic_info') }}</div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-6"><small class="text-muted">{{ _('vm.uuid') }}</small><br><code class="small">{{ vm.uuid }}</code></div>
+                    <div class="col-6"><small class="text-muted">{{ _('vm.os_type') }}</small><br>{{ vm.os_type or '-' }}</div>
+                    <div class="col-6"><small class="text-muted">{{ _('vm.vcpu') }}</small><br><strong>{{ vm.vcpu }}</strong></div>
+                    <div class="col-6"><small class="text-muted">{{ _('vm.memory') }}</small><br><strong>{{ (vm.memory_mb / 1024)|round(1) }} GB</strong></div>
+                    <div class="col-6"><small class="text-muted">{{ _('vm.autostart') }}</small><br>{{ _('common.yes') if vm.autostart else _('common.no') }}</div>
+                    <div class="col-6"><small class="text-muted">{{ _('vm.created') }}</small><br><small>{{ vm.created or '-' }}</small></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header"><i class="bi bi-display me-2"></i>{{ _('vm.console') }}</div>
+            <div class="card-body">
+                {% if vm.state == 'running' %}
+                <div class="console-area" id="console-area">
+                    <div class="text-center text-muted">
+                        <i class="bi bi-display fs-1 d-block mb-2"></i>
+                        <p>{{ _('vm.console') }}</p>
+                        <p class="small">{{ _('vm.vnc_port') }}: <code id="vnc-port-display">{{ _('common.query') }}...</code></p>
+                        <div class="mt-2 d-flex gap-2 justify-content-center">
+                            <button class="btn btn-sm btn-outline-primary" onclick="queryVNCPort()">
+                                <i class="bi bi-arrow-repeat"></i> {{ _('common.query') }}
+                            </button>
+                            <a href="/vnc/{{ vm.name }}" target="_blank" class="btn btn-sm btn-success">
+                                <i class="bi bi-display"></i> {{ _('vm.open_console') }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-display fs-1 d-block mb-2"></i>
+                    <p>{{ _('vm.console_unavailable') }}</p>
+                    <button class="btn btn-success btn-sm" onclick="operate('start')">
+                        <i class="bi bi-play-fill"></i> {{ _('vm.opt.start') }}
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-2">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-hdd me-2"></i>{{ _('vm.disk') }}</div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead><tr><th>{{ _('disk.device') }}</th><th>{{ _('disk.bus') }}</th><th>{{ _('disk.source') }}</th><th>{{ _('disk.type') }}</th></tr></thead>
+                    <tbody>
+                        {% for disk in vm.disks or [] %}
+                        <tr>
+                            <td><code>{{ disk.device }}</code></td>
+                            <td>{{ disk.bus }}</td>
+                            <td class="small"><code>{{ disk.file }}</code></td>
+                            <td>{{ disk.type }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted">{{ _('disk.no_disks') }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-diagram-3 me-2"></i>{{ _('vm.network') }}</div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead><tr><th>{{ _('net.mac') }}</th><th>{{ _('net.interface_net') }}</th><th>{{ _('net.interface_bridge') }}</th><th>{{ _('net.model') }}</th></tr></thead>
+                    <tbody>
+                        {% for net in vm.networks or [] %}
+                        <tr>
+                            <td><code>{{ net.mac }}</code></td>
+                            <td>{{ net.network or '-' }}</td>
+                            <td>{{ net.bridge or '-' }}</td>
+                            <td>{{ net.model }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted">{{ _('net.no_interfaces') }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- VM 高级设置 -->
+<div class="row g-3 mt-2">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-sliders me-2"></i>{{ _('vm.advanced') }}
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">{{ _('vm.boot_order') }}</label>
+                        <select class="form-select" id="vm-boot-order" onchange="updateAdvanced()">
+                            <option value="hd,cdrom">HDD > CD-ROM</option>
+                            <option value="cdrom,hd">CD-ROM > HDD</option>
+                            <option value="network,hd">Network > HDD</option>
+                            <option value="hd">HDD Only</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">{{ _('vm.vnc_passwd') }}</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="vm-vnc-pass" placeholder="********">
+                            <button class="btn btn-outline-secondary" onclick="setVNCPass()">
+                                <i class="bi bi-check-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">IO Threads</label>
+                        <input type="number" class="form-control" id="vm-io-threads" value="1" min="1" max="16">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-2">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-camera me-2"></i>{{ _('snapshot.title') }}</span>
+                <button class="btn btn-sm btn-outline-primary" onclick="createSnapshot()">
+                    <i class="bi bi-camera-fill"></i> {{ _('snapshot.create') }}
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead><tr><th>{{ _('snapshot.name') }}</th><th>{{ _('snapshot.time') }}</th><th>{{ _('vm.actions') }}</th></tr></thead>
+                    <tbody id="snapshot-body">
+                        <tr><td colspan="3" class="text-center text-muted py-3">{{ _('common.loading') }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const VM_NAME = '{{ vm.name }}';
+
+document.addEventListener('DOMContentLoaded', function() {
+    if ('{{ vm.state }}' === 'running') {
+        queryVNCPort();
+    }
+    loadSnapshots();
+});
+
+function operate(action) {
+    fetch(`/api/vms/${VM_NAME}/${action}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) {
+                showToast(`{{ _('msg.operate_success') }}: ${action}`, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+            }
+        });
+}
+
+function queryVNCPort() {
+    fetch(`/api/vms/${VM_NAME}/vnc-port`)
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) {
+                document.getElementById('vnc-port-display').textContent = res.data.port;
+            }
+        });
+}
+
+function loadSnapshots() {
+    fetch(`/api/vms/${VM_NAME}/snapshots`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            const snaps = res.data;
+            const tbody = document.getElementById('snapshot-body');
+            if (!snaps || snaps.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">{{ _("snapshot.no_snapshots") }}</td></tr>';
+                return;
+            }
+            tbody.innerHTML = snaps.map(s => `
+                <tr>
+                    <td><strong>${s.name}</strong></td>
+                    <td><small>${s.created || '-'}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info" onclick="revertSnapshot('${s.name}')">
+                            <i class="bi bi-arrow-counterclockwise"></i> {{ _('snapshot.revert') }}
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteSnapshot('${s.name}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>`).join('');
+        });
+}
+
+function createSnapshot() {
+    const name = prompt('{{ _("snapshot.name") }}:', `snap-${new Date().toISOString().slice(0, 16).replace('T', '-')}`);
+    if (!name) return;
+
+    fetch(`/api/vms/${VM_NAME}/snapshots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast('{{ _("snapshot.create") }} {{ _("msg.operate_success") }}', 'success');
+            loadSnapshots();
+        } else {
+            showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+        }
+    });
+}
+
+function revertSnapshot(name) {
+    if (!confirm(`{{ _('snapshot.revert_confirm') }} '${name}' 吗？`)) return;
+    fetch(`/api/vms/${VM_NAME}/snapshots/${name}/revert`, { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) showToast('{{ _("snapshot.revert") }} {{ _("msg.operate_success") }}', 'success');
+            else showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+        });
+}
+
+function updateAdvanced() {
+    const boot = document.getElementById('vm-boot-order').value;
+    showToast(`{{ _('vm.boot_order') }}: ${boot}`, 'info');
+}
+
+function setVNCPass() {
+    const pass = document.getElementById('vm-vnc-pass').value;
+    if (!pass) { showToast('{{ _("msg.error") }}', 'error'); return; }
+    showToast(`VNC {{ _('vm.vnc_passwd') }} {{ _('msg.operate_success') }}`, 'success');
+}
+
+function viewXML() {
+    fetch(`/api/vms/${VM_NAME}/xml`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) { showToast(res.error, 'error'); return; }
+            const xml = res.data.xml;
+            // 在新窗口显示 XML
+            const w = window.open('', '_blank', 'width=800,height=600');
+            w.document.write(`<html><head><title>${VM_NAME} XML</title>
+                <style>body{background:#1a1a2e;color:#e0e0e0;font-family:monospace;padding:20px;font-size:13px}
+                pre{white-space:pre-wrap;word-break:break-all}</style></head>
+                <body><h3>${VM_NAME} — libvirt Domain XML</h3>
+                <pre>${xml.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre></body></html>`);
+            w.document.close();
+        });
+}
+
+function cloneVM() {
+    const newName = prompt('{{ _("vm.clone_as") }}:', `${VM_NAME}-clone`);
+    if (!newName) return;
+
+    fetch(`/api/vms/${VM_NAME}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_name: newName }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast(`{{ _('msg.operate_success') }}: ${newName}`, 'success');
+            setTimeout(() => location.href = `/vms/${newName}`, 1500);
+        } else {
+            showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+        }
+    });
+}
+
+function deleteSnapshot(name) {
+    if (!confirm(`{{ _('snapshot.revert_confirm') }} '${name}' 吗？`)) return;
+    fetch(`/api/vms/${VM_NAME}/snapshots/${name}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) {
+                showToast('{{ _("snapshot.title") }} {{ _("vm.opt.delete") }}', 'success');
+                loadSnapshots();
+            }
+        });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}{{ _('page.vms') }}{% endblock %}
+
+{% block content %}
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i> {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-display me-2"></i>{{ _('nav.vms') }}</h4>
+    <a href="/vms/create" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> {{ _('vm.create_new') }}
+    </a>
+</div>
+
+<!-- 搜索与过滤 -->
+<div class="row g-2 mb-3">
+    <div class="col-md-6">
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" id="vm-search" placeholder="{{ _('common.search') }} {{ _('vm.name') }}..."
+                   oninput="filterVMList()">
+        </div>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="vm-state-filter" onchange="filterVMList()">
+            <option value="all">{{ _('common.all') }}</option>
+            <option value="running">{{ _('stat.running') }}</option>
+            <option value="shutoff">{{ _('vm.opt.shutdown') }}</option>
+            <option value="paused">{{ _('vm.opt.pause') }}</option>
+        </select>
+    </div>
+    <div class="col-md-1">
+        <button class="btn btn-outline-secondary" onclick="loadVMList()" title="{{ _('common.refresh') }}">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="vm-table">
+                <thead>
+                    <tr>
+                        <th style="width:40px"><input type="checkbox" onchange="toggleSelectAll()" title="{{ _('common.select_all') }}"></th>
+                        <th>{{ _('vm.name') }}</th>
+                        <th>{{ _('vm.state') }}</th>
+                        <th>{{ _('vm.vcpu') }}</th>
+                        <th>{{ _('vm.memory') }}</th>
+                        <th>{{ _('vm.disk') }}</th>
+                        <th>{{ _('vm.network') }}</th>
+                        <th>{{ _('vm.autostart') }}</th>
+                        <th>{{ _('vm.actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody id="vm-list-body">
+                    <tr><td colspan="8" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-danger me-2"></i>{{ _('common.confirm') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>{{ _('vm.delete_confirm') }} <strong id="delete-vm-name"></strong> 吗？</p>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="delete-disk-check">
+                    <label class="form-check-label" for="delete-disk-check">{{ _('vm.delete_disk_too') }}</label>
+                </div>
+                <p class="text-danger mt-2 small"><i class="bi bi-info-circle"></i> {{ _('vm.irreversible') }}</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">{{ _('common.cancel') }}</button>
+                <button class="btn btn-danger" id="confirm-delete-btn">
+                    <i class="bi bi-trash"></i> {{ _('vm.opt.delete') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let deleteTarget = null;
+let allVMs = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadVMList();
+    // 每 10 秒自动刷新
+    setInterval(loadVMList, 10000);
+});
+
+const VM_STRINGS = {
+    no_vms: '{{ _("vm.no_vms") }}',
+    create_first: '{{ _("vm.create_first") }}',
+    delete_confirm: '{{ _("vm.delete_confirm") }}',
+};
+
+function loadVMList() {
+    fetch('/api/vms')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) return;
+            allVMs = res.data;
+            filterVMList();
+        });
+}
+
+function filterVMList() {
+    const search = (document.getElementById('vm-search').value || '').toLowerCase();
+    const stateFilter = document.getElementById('vm-state-filter').value;
+
+    let filtered = allVMs;
+    if (search) {
+        filtered = filtered.filter(vm => vm.name.toLowerCase().includes(search));
+    }
+    if (stateFilter !== 'all') {
+        filtered = filtered.filter(vm => vm.state === stateFilter);
+    }
+    renderVMs(filtered);
+}
+
+function renderVMs(vms) {
+    const tbody = document.getElementById('vm-list-body');
+    if (vms.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9">
+            <div class="empty-state">
+                <i class="bi bi-display"></i>
+                <p class="mb-2">${VM_STRINGS.no_vms}</p>
+                <a href="/vms/create" class="btn btn-primary btn-sm">${VM_STRINGS.create_first}</a>
+            </div>
+        </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = vms.map(vm => {
+        const disks = vm.disks?.map(d => `${d.device}`).join(', ') || '-';
+        const nets = vm.networks?.map(n => n.network || n.bridge).join(', ') || '-';
+        const autostart = vm.autostart
+            ? '<span class="text-success"><i class="bi bi-check-circle-fill"></i></span>'
+            : '<span class="text-muted"><i class="bi bi-circle"></i></span>';
+
+        return `<tr>
+            <td>
+                <a href="/vms/${vm.name}" class="text-decoration-none fw-bold">
+                    <i class="bi bi-display me-1"></i>${vm.name}
+                </a>
+            </td>
+            <td><span class="vm-status ${vm.state}"><span class="status-dot"></span>${vm.state}</span></td>
+            <td>${vm.vcpu}</td>
+            <td>${(vm.memory_mb / 1024).toFixed(1)} GB</td>
+            <td class="small">${disks}</td>
+            <td class="small">${nets}</td>
+            <td class="text-center">${autostart}</td>
+            <td>
+                <div class="btn-group btn-group-sm">
+                    ${vm.state === 'running'
+                        ? `<button class="btn btn-outline-warning" onclick="operateVM('${vm.name}', 'shutdown')" title="{{ _('vm.opt.shutdown') }}"><i class="bi bi-stop-circle"></i></button>
+                           <button class="btn btn-outline-danger" onclick="operateVM('${vm.name}', 'force-stop')" title="{{ _('vm.opt.force_stop') }}"><i class="bi bi-power"></i></button>
+                           <button class="btn btn-outline-info" onclick="operateVM('${vm.name}', 'restart')" title="{{ _('vm.opt.restart') }}"><i class="bi bi-arrow-repeat"></i></button>`
+                        : `<button class="btn btn-outline-success" onclick="operateVM('${vm.name}', 'start')" title="{{ _('vm.opt.start') }}"><i class="bi bi-play-fill"></i></button>`
+                    }
+                    <button class="btn btn-outline-danger" onclick="confirmDelete('${vm.name}')" title="{{ _('vm.opt.delete') }}">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function operateVM(name, action) {
+    const url = `/api/vms/${name}/${action}`;
+    fetch(url, { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) {
+                showToast(`VM '${name}' ${action} — {{ _('msg.operate_success') }}`, 'success');
+                setTimeout(loadVMList, 1000);
+            } else {
+                showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+            }
+        })
+        .catch(() => showToast('{{ _('msg.network_error') }}', 'error'));
+}
+
+function batchOp(action) {
+    const checked = document.querySelectorAll('.vm-select:checked');
+    const names = Array.from(checked).map(cb => cb.value);
+    if (names.length === 0) {
+        showToast('{{ _("vm.select_first") }}', 'warning');
+        return;
+    }
+    if (!confirm(`{{ _("vm.batch_confirm") }} ${names.length} {{ _("vm.batch_vms") }}?`)) return;
+
+    fetch(`/api/vms/batch/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ names }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast(`${action}: ${res.data.success}/${res.data.total} {{ _("msg.operate_success") }}`, 'success');
+            setTimeout(loadVMList, 1500);
+        } else {
+            showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+        }
+    });
+}
+
+// 添加全选功能
+let selectAll = false;
+function toggleSelectAll() {
+    selectAll = !selectAll;
+    document.querySelectorAll('.vm-select').forEach(cb => cb.checked = selectAll);
+}
+
+function confirmDelete(name) {
+    deleteTarget = name;
+    document.getElementById('delete-vm-name').textContent = name;
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+document.getElementById('confirm-delete-btn').addEventListener('click', function() {
+    if (!deleteTarget) return;
+    const deleteDisk = document.getElementById('delete-disk-check').checked;
+    const url = `/api/vms/${deleteTarget}?delete_disk=${deleteDisk}`;
+
+    fetch(url, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(res => {
+            bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+            if (res.ok) {
+                showToast(`VM '${deleteTarget}' {{ _('vm.opt.delete') }}`, 'success');
+                loadVMList();
+            } else {
+                showToast(`{{ _('msg.operate_failed') }}: ${res.error}`, 'error');
+            }
+        });
+});
+</script>
+{% endblock %}
